@@ -1668,9 +1668,30 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ── Mobile route ──
+  if (req.method === 'GET' && pathname === '/mobile') {
+    const mobilePath = path.join(__dirname, 'mobile.html');
+    fs.readFile(mobilePath, (err, data) => {
+      if (err) {
+        sendResponse(res, 404, 'text/plain', 'Mobile view not found');
+        return;
+      }
+      sendResponse(res, 200, 'text/html', data);
+    });
+    return;
+  }
+
   // Serve static files
   let filePath = path.join(__dirname, pathname);
   if (pathname === '/') {
+    // Auto-detect mobile browsers and redirect to /mobile
+    const ua = (req.headers['user-agent'] || '').toLowerCase();
+    const isMobile = /mobile|android|iphone|ipad|ipod|webos|blackberry|opera mini|iemobile/i.test(ua);
+    if (isMobile) {
+      res.writeHead(302, { 'Location': '/mobile' });
+      res.end();
+      return;
+    }
     filePath = path.join(__dirname, 'app.html');
   }
 

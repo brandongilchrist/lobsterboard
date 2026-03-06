@@ -397,7 +397,7 @@ let _lbReleaseCache = null;
 let _lbReleaseCacheTime = 0;
 
 function sendResponse(res, statusCode, contentType, data, extraHeaders = {}) {
-  res.writeHead(statusCode, { 'Content-Type': contentType, ...extraHeaders });
+  res.writeHead(statusCode, { 'Content-Type': contentType, 'Access-Control-Allow-Origin': '*', ...extraHeaders });
   res.end(data);
 }
 

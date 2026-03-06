@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0d1117">
+  <title>LobsterBoard Mobile</title>
+  <style>
+    /* ── Inline setup screen + connection indicator styles ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body.setup-mode {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0d1117; color: #e6edf3; display: flex; align-items: center;
+      justify-content: center; min-height: 100vh; padding: 20px;
+    }
+    .setup-card {
+      background: #161b22; border: 1px solid #30363d; border-radius: 16px;
+      padding: 32px 24px; width: 360px; max-width: 100%;
+    }
+    .setup-logo { text-align: center; font-size: 48px; margin-bottom: 16px; }
+    .setup-title { text-align: center; font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+    .setup-subtitle { text-align: center; font-size: 13px; color: #8b949e; margin-bottom: 24px; }
+    .setup-label { display: block; font-size: 12px; color: #8b949e; margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .setup-input {
+      width: 100%; padding: 12px; background: #0d1117; border: 1px solid #30363d;
+      border-radius: 10px; color: #e6edf3; font-size: 15px; margin-bottom: 16px;
+    }
+    .setup-input:focus { outline: none; border-color: #58a6ff; box-shadow: 0 0 0 3px rgba(88,166,255,0.2); }
+    .setup-input::placeholder { color: #484f58; }
+    .setup-btn {
+      width: 100%; padding: 12px; border: none; border-radius: 10px;
+      background: #58a6ff; color: #fff; font-size: 15px; font-weight: 600;
+      cursor: pointer; transition: background 0.15s;
+    }
+    .setup-btn:active { background: #4a90e0; }
+    .setup-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .setup-error { color: #f85149; font-size: 12px; margin-bottom: 12px; min-height: 18px; text-align: center; }
+    .setup-hint { text-align: center; font-size: 11px; color: #484f58; margin-top: 16px; line-height: 1.5; }
+    .setup-saved { display: flex; align-items: center; gap: 8px; padding: 10px; background: #0d2818; border: 1px solid #238636; border-radius: 8px; font-size: 13px; color: #3fb950; margin-bottom: 16px; }
+    .setup-or { text-align: center; color: #484f58; font-size: 12px; margin: 12px 0; }
+    .setup-change { display: block; text-align: center; color: #58a6ff; font-size: 13px; cursor: pointer; background: none; border: none; margin-top: 12px; }
+    .connection-badge {
+      position: fixed; top: 8px; right: 8px; z-index: 9999;
+      padding: 4px 10px; border-radius: 20px; font-size: 10px; font-weight: 600;
+      background: rgba(13,17,23,0.9); border: 1px solid #30363d; color: #8b949e;
+      backdrop-filter: blur(8px); transition: all 0.3s;
+    }
+    .connection-badge.connected { border-color: #238636; color: #3fb950; }
+    .connection-badge.error { border-color: #da3633; color: #f85149; }
+  </style>
+</head>
+<body class="setup-mode">
+
+  <!-- ═══════════════════════════════════════════
+       SETUP SCREEN — Enter remote server URL
+       ═══════════════════════════════════════════ -->
+  <div id="setup-screen" class="setup-card">
+    <div class="setup-logo">🦞</div>
+    <div class="setup-title">LobsterBoard Mobile</div>
+    <div class="setup-subtitle">Connect to your remote dashboard server</div>
+
+    <div id="setup-saved-section" style="display:none;">
+      <div class="setup-saved">
+        <span>🟢</span>
+        <span>Connected to: <strong id="setup-saved-url"></strong></span>
+      </div>
+      <button class="setup-btn" id="btn-reconnect">Reconnect</button>
+      <button class="setup-change" id="btn-change-server">Change server</button>
+    </div>
+
+    <div id="setup-form-section">
+      <label class="setup-label">Server URL</label>
+      <input type="url" class="setup-input" id="server-url-input"
+             placeholder="http://192.168.1.100:3000"
+             autocomplete="url" inputmode="url">
+      <div class="setup-error" id="setup-error"></div>
+      <button class="setup-btn" id="btn-connect">Connect</button>
+      <div class="setup-hint">
+        Enter the URL where your LobsterBoard server is running.<br>
+        Example: <code style="color:#58a6ff;">http://192.168.1.100:3000</code>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       MOBILE APP (hidden until connected)
+       ═══════════════════════════════════════════ -->
+  <div id="mobile-app-root" style="display:none;"></div>
+
+  <!-- Connection status badge -->
+  <div class="connection-badge" id="connection-badge" style="display:none;">
+    <span id="badge-text">Connecting...</span>
+  </div>
+
+  <script>
+  (function() {
+    'use strict';
+
+    const STORAGE_KEY = 'lb-remote-server';
+    let serverUrl = '';
+
+    // ─── Setup Flow ───
+    const savedUrl = localStorage.getItem(STORAGE_KEY);
+    if (savedUrl) {
+      // Show reconnect option
+      document.getElementById('setup-saved-section').style.display = 'block';
+      document.getElementById('setup-form-section').style.display = 'none';
+      document.getElementById('setup-saved-url').textContent = savedUrl;
+      document.getElementById('server-url-input').value = savedUrl;
+    }
+
+    document.getElementById('btn-connect').addEventListener('click', () => connectToServer());
+    document.getElementById('server-url-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') connectToServer();
+    });
+    document.getElementById('btn-reconnect')?.addEventListener('click', () => {
+      connectToServer(savedUrl);
+    });
+    document.getElementById('btn-change-server')?.addEventListener('click', () => {
+      document.getElementById('setup-saved-section').style.display = 'none';
+      document.getElementById('setup-form-section').style.display = 'block';
+      document.getElementById('server-url-input').value = savedUrl || '';
+      document.getElementById('server-url-input').focus();
+    });
+
+    async function connectToServer(url) {
+      const inputUrl = url || document.getElementById('server-url-input').value.trim();
+      const errorEl = document.getElementById('setup-error');
+      errorEl.textContent = '';
+
+      if (!inputUrl) {
+        errorEl.textContent = 'Please enter a server URL';
+        return;
+      }
+
+      // Normalize URL
+      let normalizedUrl = inputUrl;
+      if (!normalizedUrl.match(/^https?:\/\//)) {
+        normalizedUrl = 'http://' + normalizedUrl;
+      }
+      normalizedUrl = normalizedUrl.replace(/\/+$/, '');
+
+      // Test connection
+      const btn = document.querySelector('.setup-btn:not([style*="display:none"])');
+      const origText = btn.textContent;
+      btn.textContent = 'Connecting...';
+      btn.disabled = true;
+
+      try {
+        const res = await fetch(normalizedUrl + '/config', {
+          signal: AbortSignal.timeout(10000)
+        });
+        if (!res.ok) throw new Error('Server returned ' + res.status);
+        const config = await res.json();
+        if (!config || typeof config !== 'object') throw new Error('Invalid response');
+
+        // Success! Save and launch
+        serverUrl = normalizedUrl;
+        localStorage.setItem(STORAGE_KEY, serverUrl);
+        launchMobileApp();
+      } catch (e) {
+        errorEl.textContent = 'Cannot connect: ' + (e.message || 'Network error');
+        btn.textContent = origText;
+        btn.disabled = false;
+      }
+    }
+
+    // ─── Launch Mobile App ───
+    function launchMobileApp() {
+      document.body.className = '';
+      document.getElementById('setup-screen').style.display = 'none';
+
+      // Show connection badge
+      const badge = document.getElementById('connection-badge');
+      badge.style.display = 'block';
+      badge.className = 'connection-badge connected';
+      document.getElementById('badge-text').textContent = new URL(serverUrl).host;
+
+      // Intercept fetch to route API calls through remote server
+      const originalFetch = window.fetch;
+      window.fetch = function(input, init) {
+        let url = typeof input === 'string' ? input : input.url;
+        // Route relative API calls to remote server
+        if (url.startsWith('/')) {
+          url = serverUrl + url;
+          if (typeof input === 'string') {
+            input = url;
+          } else {
+            input = new Request(url, input);
+          }
+        }
+        return originalFetch.call(window, input, init);
+      };
+
+      // Intercept EventSource for SSE streams
+      const OriginalEventSource = window.EventSource;
+      window.EventSource = function(url, config) {
+        if (url.startsWith('/')) {
+          url = serverUrl + url;
+        }
+        return new OriginalEventSource(url, config);
+      };
+      window.EventSource.prototype = OriginalEventSource.prototype;
+      window.EventSource.CONNECTING = OriginalEventSource.CONNECTING;
+      window.EventSource.OPEN = OriginalEventSource.OPEN;
+      window.EventSource.CLOSED = OriginalEventSource.CLOSED;
+
+      // Load CSS from remote server
+      loadRemoteCSS(serverUrl + '/css/builder.css');
+      loadRemoteCSS(serverUrl + '/css/themes.css');
+      loadRemoteCSS(serverUrl + '/css/mobile.css');
+
+      // Load JS from remote server (widgets.js must load before mobile.js)
+      loadRemoteScript(serverUrl + '/js/widgets.js', () => {
+        loadRemoteScript(serverUrl + '/js/mobile.js');
+      });
+
+      // Inject the mobile HTML shell
+      const root = document.getElementById('mobile-app-root');
+      root.style.display = 'contents';
+      document.body.classList.add('mobile-app');
+      document.body.dataset.view = 'stream';
+
+      root.innerHTML = `
+  <header class="mobile-header">
+    <div class="mobile-header-left">
+      <span style="font-size:24px;">🦞</span>
+      <span class="mobile-title">LobsterBoard</span>
+    </div>
+    <div class="mobile-header-right">
+      <button class="mobile-icon-btn" id="btn-refresh" title="Refresh">
+        <span class="mobile-icon">\u21BB</span>
+      </button>
+      <button class="mobile-icon-btn" id="btn-settings" title="Settings">
+        <span class="mobile-icon">\u2699</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="mobile-settings-drawer" id="settings-drawer">
+    <div class="settings-group">
+      <label class="settings-label">View Mode</label>
+      <div class="view-switcher">
+        <button class="view-btn active" data-view="stream">Stream</button>
+        <button class="view-btn" data-view="tabs">Tabs</button>
+        <button class="view-btn" data-view="command">Command</button>
+      </div>
+    </div>
+    <div class="settings-group">
+      <label class="settings-label">Theme</label>
+      <select id="mobile-theme-select" class="mobile-select">
+        <option value="default">\uD83C\uDF19 Dark</option>
+        <option value="feminine">\uD83C\uDF38 Feminine</option>
+        <option value="feminine-dark">\uD83D\uDC9C Feminine Dark</option>
+        <option value="terminal">\uD83D\uDCBB Terminal</option>
+        <option value="paper">\uD83D\uDCDC Paper</option>
+      </select>
+    </div>
+    <div class="settings-group">
+      <label class="settings-label">Server</label>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:12px;color:var(--text-muted,#6e7681);" id="settings-server-url">${serverUrl}</span>
+        <button class="mobile-icon-btn" style="width:28px;height:28px;font-size:14px;" id="btn-disconnect" title="Disconnect">✕</button>
+      </div>
+    </div>
+  </div>
+
+  <main class="mobile-view view-stream" id="view-stream">
+    <div class="stream-container" id="stream-container">
+      <div class="mobile-loading">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading dashboard...</div>
+      </div>
+    </div>
+  </main>
+
+  <main class="mobile-view view-tabs" id="view-tabs" style="display:none;">
+    <div class="tabs-bar" id="tabs-bar"></div>
+    <div class="tabs-panels" id="tabs-panels"></div>
+  </main>
+
+  <main class="mobile-view view-command" id="view-command" style="display:none;">
+    <div class="command-ticker" id="command-ticker"></div>
+    <div class="command-groups" id="command-groups"></div>
+  </main>
+
+  <nav class="mobile-bottom-bar" id="bottom-bar">
+    <button class="bottom-tab active" data-filter="all">
+      <span class="bottom-tab-icon">\uD83C\uDFE0</span>
+      <span class="bottom-tab-label">All</span>
+    </button>
+    <button class="bottom-tab" data-filter="openclaw">
+      <span class="bottom-tab-icon">\uD83D\uDC3E</span>
+      <span class="bottom-tab-label">OpenClaw</span>
+    </button>
+    <button class="bottom-tab" data-filter="ai">
+      <span class="bottom-tab-icon">\uD83E\uDD16</span>
+      <span class="bottom-tab-label">AI</span>
+    </button>
+    <button class="bottom-tab" data-filter="system">
+      <span class="bottom-tab-icon">\uD83D\uDCBB</span>
+      <span class="bottom-tab-label">System</span>
+    </button>
+  </nav>
+
+  <div class="mobile-fullscreen" id="fullscreen-overlay" style="display:none;">
+    <div class="fullscreen-header">
+      <span class="fullscreen-title" id="fullscreen-title"></span>
+      <button class="mobile-icon-btn fullscreen-close" id="fullscreen-close">\u2715</button>
+    </div>
+    <div class="fullscreen-body" id="fullscreen-body"></div>
+  </div>
+
+  <div class="mobile-pin-modal" id="pin-modal" style="display:none;">
+    <div class="pin-card">
+      <h3>\uD83D\uDD10 Enter PIN</h3>
+      <input type="password" id="mobile-pin-input" class="pin-input" maxlength="6" inputmode="numeric" pattern="[0-9]*" placeholder="\u2022\u2022\u2022\u2022">
+      <div class="pin-error" id="pin-error"></div>
+      <button class="btn-primary pin-submit" id="mobile-pin-submit">Unlock</button>
+    </div>
+  </div>
+      `;
+
+      // Disconnect button
+      document.getElementById('btn-disconnect').addEventListener('click', () => {
+        localStorage.removeItem(STORAGE_KEY);
+        location.reload();
+      });
+    }
+
+    function loadRemoteCSS(url) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = url;
+      document.head.appendChild(link);
+    }
+
+    function loadRemoteScript(url, onLoad) {
+      const script = document.createElement('script');
+      script.src = url;
+      if (onLoad) script.onload = onLoad;
+      script.onerror = () => {
+        console.error('Failed to load script:', url);
+        const badge = document.getElementById('connection-badge');
+        badge.className = 'connection-badge error';
+        document.getElementById('badge-text').textContent = 'Load error';
+      };
+      document.body.appendChild(script);
+    }
+
+    // Auto-connect if we have a saved URL
+    if (savedUrl) {
+      // Quick validation — try to reconnect automatically
+      connectToServer(savedUrl);
+    }
+  })();
+  </script>
+</body>
+</html>

@@ -74,6 +74,9 @@
     "node": ">=16.0.0"
   },
   "dependencies": {
+    "playwright": "^1.52.0",
+    "playwright-core": "^1.52.0",
+    "puppeteer-core": "^24.38.0",
     "systeminformation": "^5.30.7"
   }
 }

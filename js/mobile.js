@@ -735,7 +735,8 @@
       feminine: '#fdf4f8',
       'feminine-dark': '#1a0e2e',
       terminal: '#0a0a0a',
-      paper: '#f5f0e8'
+      paper: '#f5f0e8',
+      void: '#0d1117'
     };
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.content = themeColors[theme] || '#0d1117';

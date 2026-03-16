@@ -897,6 +897,42 @@ body:not([data-view="stream"]) .mobile-bottom-bar {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
 
+/* Void Space */
+.theme-void .mobile-header,
+.theme-void .tabs-bar,
+.theme-void .mobile-bottom-bar,
+.theme-void .command-ticker {
+  background: var(--bg-secondary);
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+.theme-void .view-btn.active {
+  background: var(--accent-blue, #58a6ff);
+  color: #0d1117;
+  box-shadow: none;
+}
+
+.theme-void .tab-btn.active {
+  color: var(--accent-blue, #58a6ff);
+  border-bottom-color: var(--accent-blue, #58a6ff);
+}
+
+.theme-void .bottom-tab.active {
+  color: var(--accent-blue, #58a6ff);
+}
+
+.theme-void .mobile-widget {
+  border: 1px solid var(--border, #30363d);
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.theme-void .pin-submit {
+  background: var(--accent-blue, #58a6ff);
+  color: #0d1117;
+}
+
 /* ══════════════════════════════════════════════
    RESPONSIVE: Wider phones / small tablets
    ══════════════════════════════════════════════ */
